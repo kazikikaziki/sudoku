@@ -8,27 +8,27 @@
 #include <Windows.h>
 
 const char su_SampleGridA[] = {
-	" 3 6  4  "
-	"       6 "
-	" 6   9  8"
-	"  1 26 4 "
-	"3   5 7  "
-	"2 6  3  1"
-	" 8 19    "
-	"  534   7"
-	"427   9  "
+	" 3 6  4  \n"
+	"       6 \n"
+	" 6   9  8\n"
+	"  1 26 4 \n"
+	"3   5 7  \n"
+	"2 6  3  1\n"
+	" 8 19    \n"
+	"  534   7\n"
+	"427   9  \n"
 };
 
 const char su_SampleGridB[] = {
-	"8 2     5"
-	"  4    38"
-	"5  9  2  "
-	"         "
-	"    4 69 "
-	"  5  64 2"
-	"    29 6 "
-	"  63   1 "
-	"34 5     "
+	"8 2     5\n"
+	"  4    38\n"
+	"5  9  2  \n"
+	"         \n"
+	"    4 69 \n"
+	"  5  64 2\n"
+	"    29 6 \n"
+	"  63   1 \n"
+	"34 5     \n"
 };
 
 static const int SU_SIZE = 9 * 9; // マスの数
@@ -47,6 +47,7 @@ enum TEXTATTR_ {
 	TEXTATTR_GRAY = 0x04, // non number text
 	TEXTATTR_EQUL = 0x10, // same numbers
 	TEXTATTR_ERR  = 0x20, // error
+	TEXTATTR_MSG  = 0x40, // info message
 };
 typedef int TEXTATTRS;
 
@@ -143,10 +144,16 @@ static void su_SetConsoleTextAttr(TEXTATTRS attr) {
 	if (attr & TEXTATTR_CUR) {
 		flag = BACKGROUND_RED|BACKGROUND_INTENSITY|FOREGROUND_BLUE|FOREGROUND_GREEN|FOREGROUND_RED|FOREGROUND_INTENSITY;
 	}
+
+	// エラー表示用（セルの表示には使わない）
 	if (attr & TEXTATTR_ERR) {
-		flag = BACKGROUND_RED|BACKGROUND_INTENSITY|FOREGROUND_BLUE|FOREGROUND_GREEN|FOREGROUND_RED|FOREGROUND_INTENSITY;
+		flag = FOREGROUND_RED|FOREGROUND_INTENSITY;
 	}
 
+	// メッセージ表示用（セルの表示には使わない）
+	if (attr & TEXTATTR_MSG) {
+		flag = BACKGROUND_GREEN|BACKGROUND_RED|BACKGROUND_INTENSITY;
+	}
 	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), flag);
 }
 
@@ -235,8 +242,11 @@ public:
 	}
 
 	// 説明テキストの設定
-	void setHow(const char *s) {
-		strcpy_s(m_lastmsg, sizeof(m_lastmsg), s);
+	void setHow(const char *fmt, ...) {
+		va_list args;
+		va_start(args, fmt);
+		vsnprintf(m_lastmsg, sizeof(m_lastmsg), fmt, args);
+		va_end(args);
 	}
 
 	// 盤面をリセットする（すべてのマスが空っぽになる）
@@ -341,7 +351,8 @@ public:
 		#undef SEP
 		#undef N
 		if (m_lastmsg[0]) {
-			printf("[%s]\n", m_lastmsg);
+			printf("【赤いマスに注目してください】\n");
+			printf("%s\n", m_lastmsg);
 		}
 	}
 
@@ -596,7 +607,7 @@ private:
 			assert(xx >= 0);
 			int n = *s.begin();
 			set(xx, y, n);
-			setHow("Last cell in row");
+			setHow("この横一列には空きマスが１つしかないため、このマスは %d で確定です", n);
 			return true;
 		}
 		return false;
@@ -620,7 +631,7 @@ private:
 			assert(yy >= 0);
 			int n = *s.begin();
 			set(x, yy, n);
-			setHow("Last cell in column");
+			setHow("この縦一列には空きマスが１つしかないため、このマスは %d で確定です", n);
 			return true;
 		}
 		return false;
@@ -652,7 +663,7 @@ private:
 			assert(xx >= 0 && yy >= 0);
 			int n = *s.begin();
 			set(xx, yy, n);
-			setHow("Last cell in block");
+			setHow("このブロックには空きマスが１つしかないため、このマスは %d で確定です", n);
 			return true;
 		}
 		return false;
@@ -665,7 +676,7 @@ private:
 			for (int x=0; x<9; x++) {
 				if (isHintUnique(x, y, num)) { // このマスにあるヒントは num だけ ＝ このマスには num しか入る数字が無い ＝ このマスの数字は num で確定
 					set(x, y, num);
-					setHow("Uniq num");
+					setHow("このマスに入る数字は %d しかありません。\n縦横列およびブロック内には、他の８種類の数字がすでに入っています", num);
 					return true;
 				}
 			}
@@ -702,7 +713,7 @@ private:
 			// num をヒントに含むマスは一つしかなかった。
 			// そのマスに入る数字は num で確定した
 			set(cx, cy, num);
-			setHow("Uniq in block");
+			setHow("このブロック内で %d が入る可能性があるマスはここしかありません", num);
 			return true;
 		}
 		return false;
@@ -727,7 +738,7 @@ private:
 		}
 		if (found) {
 			set(cx, y, num);
-			setHow("Uniq in row");
+			setHow("この横一列の９マス内で %d が入る可能性があるマスはここしかありません", num);
 			return true;
 		}
 		return false;
@@ -752,7 +763,7 @@ private:
 		}
 		if (found) {
 			set(x, cy, num);
-			setHow("Uniq in column");
+			setHow("この縦一列の９マス内で %d が入る可能性があるマスはここしかありません", num);
 			return true;
 		}
 		return false;
@@ -881,6 +892,8 @@ void solve() {
 
 	CSudokuGrid grid;
 	grid.loadFromString(str);
+
+	printf("\n\n");
 	grid.print();
 
 	if (grid.hasError()) {
@@ -890,14 +903,26 @@ void solve() {
 		printf("\n\n");
 	}
 
+	printf("★これからこの問題を解いていきます。\n");
+	printf("　エンターキーを押すごとに回答が１段階づつ進みます\n");
+	printf("※最後に数字を入れたマスが赤く表示されます。\n");
+	printf("　また、そのマスと同じ数字を持つマスは青で表示されます\n");
+	printf("\n");
+	getchar();
+
 	do {
 		grid.stepSolve();
 		grid.print();
 
 		if (grid.isSolved()) {
-			printf("SOLVED!!\n");
-		//	break;
+			printf("\n");
+			su_SetConsoleTextAttr(TEXTATTR_MSG);
+			printf("★★★完成★★★");
+			su_SetConsoleTextAttr(TEXTATTR_NONE);
+			printf("\n\n");
+			break;
 		} else {
+			printf("\n");
 			printf("★エンターキーを押してください。1段階づつ解いていきます\n");
 		}
 	} while (getchar());
